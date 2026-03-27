@@ -11,9 +11,9 @@ A lightweight, CDN-hosted presentation builder with:
 
 ```html
 <script src="https://cdn.jsdelivr.net/gh/gitbrent/pptxgenjs/dist/pptxgen.bundle.js"></script>
-<script src="https://cdn.jsdelivr.net/gh/YOUR_ORG/standard-deck@2.0/standard-deck.js"></script>
-<script src="https://cdn.jsdelivr.net/gh/YOUR_ORG/standard-deck@2.0/deck-layouts.js"></script>
-<script src="https://cdn.jsdelivr.net/gh/YOUR_ORG/standard-deck@2.0/deck-shell.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/hugedeal-lab/standard-deck@main/standard-deck.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/hugedeal-lab/standard-deck@main/deck-layouts.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/hugedeal-lab/standard-deck@main/deck-shell.js"></script>
 <script>
 var D = [/* slide data */];
 deckInit({title: 'My Presentation'});

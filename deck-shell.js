@@ -1,6 +1,8 @@
 /* ============================================================
- deck-shell.js v5.1.1 -- UI Shell & PPTX Export
+ deck-shell.js v5.1.2 -- UI Shell & PPTX Export
  Depends on: standard-deck.js, deck-layouts.js, pptxgen.bundle.js
+ Phase 1 fixes: logo aspect ratio, exportText margins,
+                exportIcon centering, compact text wrap
  ============================================================ */
 
 (function () {
@@ -21,7 +23,7 @@ var _noLogo        = false;
 var _imageMode     = false;
 
 // ============================================================
-// STYLES — V5.1.1: Top toolbar
+// STYLES — V5.1.2: Top toolbar
 // ============================================================
 
 function injectStyles() {
@@ -481,6 +483,7 @@ panel.querySelector('.sd-logo-close').addEventListener('click', function () {
 panel.querySelector('.sd-logo-upload').addEventListener('click', function () {
   panel.querySelector('.sd-logo-file').click();
 });
+// PHASE 1 FIX: Capture actual image aspect ratio instead of hardcoded 2:1
 panel.querySelector('.sd-logo-file').addEventListener('change', function (e) {
   var file = e.target.files[0];
   if (!file) return;
@@ -491,9 +494,19 @@ panel.querySelector('.sd-logo-file').addEventListener('change', function (e) {
   var reader = new FileReader();
   reader.onload = function (ev) {
     var dataUri = ev.target.result;
-    panel.querySelector('.sd-logo-preview').innerHTML = '<img src="' + dataUri + '">';
-    panel.querySelector('.sd-logo-controls').style.display = 'flex';
-    _customLogo = { src: dataUri, width: 80, position: 'top-right' };
+    var tempImg = new Image();
+    tempImg.onload = function () {
+      var aspectRatio = tempImg.naturalHeight / tempImg.naturalWidth;
+      panel.querySelector('.sd-logo-preview').innerHTML = '<img src="' + dataUri + '">';
+      panel.querySelector('.sd-logo-controls').style.display = 'flex';
+      _customLogo = {
+        src: dataUri,
+        width: 80,
+        aspectRatio: aspectRatio,
+        position: 'top-right'
+      };
+    };
+    tempImg.src = dataUri;
   };
   reader.readAsDataURL(file);
 });
@@ -615,25 +628,22 @@ showSlide(_currentSlide);
 }
 
 // ============================================================
-// V5.1.1: PPTX EXPORT WITH GUARD
+// V5.1.2: PPTX EXPORT WITH GUARD + LOGO FIX
 // ============================================================
 
 function exportPPTX() {
 var downloadBtn = document.querySelector('.sd-download-btn');
 
-// Guard 1: PptxGenJS loaded?
 if (typeof PptxGenJS === 'undefined' && typeof pptxgen === 'undefined') {
   showToast('Export library still loading. Please try again in a moment.', 'warn');
   return;
 }
 
-// Guard 2: D array exists?
 if (!_D || !_D.length) {
   showToast('No slide data found.', 'bad');
   return;
 }
 
-// Guard 3: Prevent double-click
 if (downloadBtn && downloadBtn.disabled) return;
 if (downloadBtn) {
   downloadBtn.disabled = true;
@@ -697,13 +707,16 @@ try {
 
     if (slideData.notes) slide.addNotes(slideData.notes);
 
+    // PHASE 1 FIX: Use actual aspect ratio instead of hardcoded 0.5
     if (_customLogo && !_noLogo) {
       var logoPos = getLogoPosition(_customLogo);
+      var logoWInches = _customLogo.width / 144;
+      var logoHInches = logoWInches * (_customLogo.aspectRatio || 0.5);
       slide.addImage({
         data: _customLogo.src,
         x: logoPos.x, y: logoPos.y,
-        w: _customLogo.width / 144,
-        h: (_customLogo.width * 0.5) / 144
+        w: logoWInches,
+        h: logoHInches
       });
     }
   });
@@ -751,7 +764,10 @@ var fn = exporters[el.type];
 if (fn) fn(slide, el, isDark, accent, pptx);
 }
 
+// PHASE 1 FIX: Added margin:[0,0,0,0], compact detection for
+// small bounding boxes (circles, pills), wrap:false for compact
 function exportText(slide, el, isDark) {
+var isCompact = el.w <= 0.80 && el.h <= 0.80;
 slide.addText(el.text || '', {
   x: el.x, y: el.y, w: el.w, h: el.h,
   fontSize: el.size,
@@ -761,8 +777,10 @@ slide.addText(el.text || '', {
   color: SD.colorForPptx(el.color || 'body', isDark),
   align: el.align || 'left',
   valign: el.valign || 'top',
-  lineSpacingMultiple: 1.35,
-  wrap: true
+  lineSpacingMultiple: isCompact ? 1.0 : 1.35,
+  wrap: !isCompact,
+  margin: [0, 0, 0, 0],
+  shrinkText: isCompact
 });
 }
 
@@ -802,7 +820,8 @@ slide.addText(el.text || '', {
   fontFace: 'Mazda Type, Classico URW, Montserrat, sans-serif',
   bold: true,
   color: SD.colorForPptx(el.color || 'white', isDark),
-  align: 'center', valign: 'middle'
+  align: 'center', valign: 'middle',
+  margin: [0, 0, 0, 0]
 });
 }
 
@@ -813,11 +832,17 @@ slide.addShape(pptx.shapes.RECTANGLE, {
 });
 }
 
+// PHASE 1 FIX: Reduced emoji scale 0.55→0.45, zero margins,
+// lineSpacing 1.0 for better vertical centering in circles
 function exportIcon(slide, el) {
+var fontSize = Math.min(el.w, el.h) * 72 * 0.45;
 slide.addText(el.icon || '', {
   x: el.x, y: el.y, w: el.w, h: el.h,
-  fontSize: Math.min(el.w, el.h) * 72 * 0.55,
-  align: 'center', valign: 'middle'
+  fontSize: fontSize,
+  align: 'center',
+  valign: 'middle',
+  margin: [0, 0, 0, 0],
+  lineSpacingMultiple: 1.0
 });
 }
 
@@ -929,7 +954,7 @@ return title.replace(/[^a-zA-Z0-9\s_-]/g, '').replace(/\s+/g, '_').substring(0, 
 }
 
 // ============================================================
-// V5.1.1: UPDATED deckInit()
+// V5.1.2: UPDATED deckInit()
 // ============================================================
 
 function deckInit(config) {

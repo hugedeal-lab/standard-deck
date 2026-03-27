@@ -1,380 +1,466 @@
 /* ============================================================
-deck-layouts.js v2.0 — Layout Shortcut Library
-Depends on: standard-deck.js (for constants only)
-============================================================ */
+   deck-layouts.js v5.1.1 -- Layout Shortcut Library
+   Depends on: standard-deck.js (for SD_CONST, getTitleMetrics)
+   ============================================================ */
 
 (function () {
-'use strict';
+  'use strict';
 
-var SD = window.StandardDeck;
-if (!SD) {
- console.error('[deck-layouts] standard-deck.js must load first');
- return;
-}
+  // Ensure the base StandardDeck object and its constants are loaded.
+  var SD = window.StandardDeck;
+  if (!SD || !SD.SD_CONST) {
+    console.error('[deck-layouts] FATAL: standard-deck.js v5.1+ must load first.');
+    return;
+  }
 
-var TAG_Y     = 0.56;
-var TAG_H     = 0.25;
-var TITLE_Y   = 0.85;
-var TITLE_H   = 0.45;
-var CONTENT_Y = 1.55;
-var LEFT_X    = 0.50;
-var RIGHT_X   = 12.83;
-var FULL_W    = RIGHT_X - LEFT_X;
+  var C = SD.SD_CONST;
 
-function tagTitle(tag, title, isDark) {
- var els = [];
- if (tag) {
-   els.push({
-     type: 't', text: tag.toUpperCase(), x: LEFT_X, y: TAG_Y,
-     w: FULL_W, h: TAG_H, font: 'H', size: 11, color: 'accent'
-   });
- }
- if (title) {
-   els.push({
-     type: 't', text: title, x: LEFT_X, y: TITLE_Y,
-     w: FULL_W, h: TITLE_H, font: 'H', size: 33, color: 'title'
-   });
- }
- return els;
-}
+  // ============================================================
+  // V5.1.1: SHARED HEADER RENDERER
+  // ============================================================
 
-function colPositions(count, gap) {
- gap = gap || 0.25;
- var totalGap = gap * (count - 1);
- var colW = (FULL_W - totalGap) / count;
- var cols = [];
- for (var i = 0; i < count; i++) {
-   cols.push({ x: LEFT_X + i * (colW + gap), w: colW });
- }
- return cols;
-}
+  /**
+   * Generates element objects for the standard header (tag + title).
+   * This is the universal starting point for almost all layouts.
+   *
+   * @param {object} slide - The slide data object from the D array.
+   * @returns {object} An object containing the element array `els`
+   *                   and the calculated `contentY` to start content.
+   */
+  function renderHeader(slide) {
+    var els = [];
+    var metrics = SD.getTitleMetrics(slide.title);
 
-function layoutCover(cfg) {
- var els = [];
- if (cfg.tag) {
-   els.push({
-     type: 't', text: cfg.tag.toUpperCase(),
-     x: LEFT_X, y: 2.20, w: FULL_W, h: 0.30,
-     font: 'H', size: 11, color: 'accent'
-   });
- }
- var titleSize = (cfg.title && cfg.title.length > 30) ? 38 : 42;
- els.push({
-   type: 't', text: cfg.title || 'Untitled',
-   x: LEFT_X, y: 2.55, w: FULL_W, h: 0.80,
-   font: 'H', size: titleSize, color: 'title'
- });
- if (cfg.subtitle) {
-   els.push({
-     type: 't', text: cfg.subtitle,
-     x: LEFT_X, y: 3.45, w: FULL_W, h: 0.45,
-     font: 'H', size: 18, color: 'sub'
-   });
- }
- if (cfg.date || cfg.description) {
-   els.push({
-     type: 't', text: cfg.date || cfg.description,
-     x: LEFT_X, y: 4.00, w: FULL_W, h: 0.35,
-     font: 'B', size: 12, color: 'body'
-   });
- }
- return els;
-}
+    // Create Tag element if it exists
+    if (slide.tag) {
+      els.push({
+        type: 't',
+        text: slide.tag,
+        x:     C.SAFE_X_MIN,
+        y:     C.TAG_Y,
+        w:     11.00,
+        h:     C.TAG_H,
+        font:  'H',
+        size:  11,
+        color: 'accent' // Color token is resolved by the renderer
+      });
+    }
 
-function layoutClosing(cfg) {
- var els = [];
- var titleSize = (cfg.title && cfg.title.length > 30) ? 38 : 42;
- els.push({
-   type: 't', text: cfg.title || 'Thank You',
-   x: LEFT_X, y: 2.60, w: FULL_W, h: 0.80,
-   font: 'H', size: titleSize, color: 'title'
- });
- if (cfg.subtitle) {
-   els.push({
-     type: 't', text: cfg.subtitle,
-     x: LEFT_X, y: 3.50, w: FULL_W, h: 0.45,
-     font: 'H', size: 18, color: 'sub'
-   });
- }
- if (cfg.attribution) {
-   els.push({
-     type: 't', text: cfg.attribution,
-     x: LEFT_X, y: 4.10, w: FULL_W, h: 0.30,
-     font: 'B', size: 11, color: 'muted'
-   });
- }
- return els;
-}
+    // Create Title element if it exists
+    if (slide.title) {
+      els.push({
+        type: 't',
+        text:  slide.title,
+        x:     C.SAFE_X_MIN,
+        y:     C.TITLE_Y,
+        w:     11.00,
+        h:     metrics.titleH, // Dynamically 0.55" or 0.90"
+        font:  'H',
+        size:  33,
+        color: 'title'
+      });
+    }
 
-function layoutDivider(cfg) {
- var els = [];
- els.push({
-   type: 't', text: cfg.title || '',
-   x: LEFT_X, y: 2.80, w: FULL_W, h: 0.65,
-   font: 'H', size: 36, color: 'title'
- });
- if (cfg.subtitle) {
-   els.push({
-     type: 't', text: cfg.subtitle,
-     x: LEFT_X, y: 3.55, w: FULL_W, h: 0.40,
-     font: 'B', size: 16, color: 'sub'
-   });
- }
- return els;
-}
+    // Return the header elements and the correct starting Y for content
+    return {
+      els:      els,
+      contentY: metrics.contentY // Dynamically 2.10" or 2.30"
+    };
+  }
 
-function layoutAgenda(cfg) {
- var items = cfg.items || [];
- var els = tagTitle(cfg.tag, cfg.title);
- var rowH = 0.70;
- var gap  = 0.18;
- var startY = CONTENT_Y;
- items.forEach(function (item, i) {
-   if (i >= SD.LIMITS.rows + 1) return;
-   var ry = startY + i * (rowH + gap);
-   els.push({
-     type: 's', x: LEFT_X, y: ry,
-     w: FULL_W, h: rowH, fill: 'cardBg', border: 'cardBorder'
-   });
-   if (cfg.numbered) {
-     els.push({
-       type: 't', text: String(i + 1).padStart(2, '0'),
-       x: LEFT_X + 0.20, y: ry, w: 0.80, h: rowH,
-       font: 'H', size: 18, color: 'accent', valign: 'middle'
-     });
-   }
-   var textX = cfg.numbered ? LEFT_X + 1.20 : LEFT_X + 0.25;
-   var textW = cfg.numbered ? FULL_W * 0.80 - 1.0 : FULL_W * 0.80;
-   els.push({
-     type: 't', text: item.title || '',
-     x: textX, y: ry, w: textW * 0.35, h: rowH,
-     font: 'H', size: 14, color: 'title', valign: 'middle'
-   });
-   if (item.text) {
-     els.push({
-       type: 't', text: item.text,
-       x: textX + textW * 0.38, y: ry, w: textW * 0.55, h: rowH,
-       font: 'B', size: 12, color: 'body', valign: 'middle'
-     });
-   }
- });
- return els;
-}
+  // ============================================================
+  // GRID HELPER
+  // ============================================================
+  function getGrid(colCount) {
+    var key = 'col' + colCount;
+    return C.GRID[key] || C.GRID.col3; // Default to 3 columns if invalid
+  }
 
-function layoutCards(cfg) {
- var items   = cfg.items || [];
- var cols    = colPositions(cfg.columns || 3);
- var els     = tagTitle(cfg.tag, cfg.title);
- var cardH   = 3.50;
- var cardY   = CONTENT_Y;
- items.forEach(function (item, i) {
-   if (i >= SD.LIMITS.cards) return;
-   var col = cols[i % cols.length];
-   var cy  = cardY + Math.floor(i / cols.length) * (cardH + 0.25);
-   var iw  = col.w * 0.80;
-   var ix  = col.x + (col.w - iw) / 2;
-   els.push({
-     type: 's', x: col.x, y: cy,
-     w: col.w, h: cardH, fill: 'cardBg', border: 'cardBorder'
-   });
-   var curY = cy + 0.30;
-   if (item.icon) {
-     els.push({ type: 'i', icon: item.icon, x: ix, y: curY, w: 0.45, h: 0.45 });
-     curY += 0.55;
-   }
-   if (item.title) {
-     els.push({ type: 't', text: item.title, x: ix, y: curY, w: iw, h: 0.35, font: 'H', size: 15, color: 'title' });
-     curY += 0.45;
-   }
-   els.push({ type: 'd', x: ix, y: curY, w: iw, color: 'ltGray' });
-   curY += 0.20;
-   if (item.text) {
-     els.push({ type: 't', text: item.text, x: ix, y: curY, w: iw, h: 1.20, font: 'B', size: 12, color: 'body' });
-     curY += 1.30;
-   }
-   if (item.sub) {
-     els.push({ type: 't', text: item.sub, x: ix, y: curY, w: iw, h: 0.30, font: 'B', size: 10, color: 'muted' });
-   }
-   if (item.pill) {
-     var pillColor = item.pillColor || 'accent';
-     els.push({ type: 'p', text: item.pill, x: ix, y: cy + cardH - 0.50, w: 1.30, h: 0.30, fill: pillColor, color: 'white', size: 9 });
-   }
- });
- return els;
-}
 
-function layoutStats(cfg) {
- var items    = cfg.items || [];
- var numCols  = cfg.columns || 3;
- var numRows  = cfg.rows || 1;
- var cols     = colPositions(numCols);
- var els      = tagTitle(cfg.tag, cfg.title);
- var cellH = numRows > 1 ? 2.20 : 3.50;
- var cellGap = 0.25;
- items.forEach(function (item, i) {
-   if (i >= SD.LIMITS.stats) return;
-   var ci  = i % numCols;
-   var ri  = Math.floor(i / numCols);
-   var col = cols[ci];
-   var cy  = CONTENT_Y + ri * (cellH + cellGap);
-   var iw  = col.w * 0.80;
-   var ix  = col.x + (col.w - iw) / 2;
-   els.push({ type: 's', x: col.x, y: cy, w: col.w, h: cellH, fill: 'cardBg', border: 'cardBorder' });
-   els.push({ type: 't', text: item.value || '—', x: ix, y: cy + 0.30, w: iw, h: 0.80, font: 'H', size: 42, color: 'accent' });
-   if (item.label) {
-     els.push({ type: 't', text: item.label, x: ix, y: cy + 1.15, w: iw, h: 0.30, font: 'H', size: 13, color: 'title' });
-   }
-   if (item.text) {
-     els.push({ type: 'd', x: ix, y: cy + 1.55, w: iw, color: 'ltGray' });
-     els.push({ type: 't', text: item.text, x: ix, y: cy + 1.70, w: iw, h: 0.80, font: 'B', size: 11, color: 'body' });
-   }
- });
- return els;
-}
+  // ============================================================
+  // LAYOUT: COVER (unique positioning, always dark)
+  // ============================================================
+  function layoutCover(cfg) {
+    var els = [];
+    // Cover does not use renderHeader(), but does use its constants and logic
+    var metrics = SD.getTitleMetrics(cfg.title);
 
-function layoutMetrics(cfg) {
- var items   = cfg.items || [];
- var numCols = Math.min(items.length, 3);
- var cols    = colPositions(numCols);
- var els     = tagTitle(cfg.tag, cfg.title);
- var cellH = 2.00;
- var cellGap = 0.25;
- items.forEach(function (item, i) {
-   if (i >= SD.LIMITS.stats) return;
-   var ci  = i % numCols;
-   var ri  = Math.floor(i / numCols);
-   var col = cols[ci];
-   var cy  = CONTENT_Y + ri * (cellH + cellGap);
-   var iw  = col.w * 0.80;
-   var ix  = col.x + (col.w - iw) / 2;
-   els.push({ type: 's', x: col.x, y: cy, w: col.w, h: cellH, fill: 'cardBg', border: 'cardBorder' });
-   els.push({ type: 't', text: item.value || '—', x: ix, y: cy + 0.20, w: iw * 0.65, h: 0.65, font: 'H', size: 36, color: 'title' });
-   if (item.trend) {
-     var trendColor = item.trendDir === 'up' ? 'ok' : item.trendDir === 'down' ? 'bad' : 'warn';
-     var arrow = item.trendDir === 'up' ? '▲' : item.trendDir === 'down' ? '▼' : '●';
-     els.push({ type: 'p', text: arrow + ' ' + item.trend, x: ix + iw * 0.65 + 0.10, y: cy + 0.35, w: 1.10, h: 0.30, fill: trendColor, color: 'white', size: 9 });
-   }
-   if (item.label) {
-     els.push({ type: 't', text: item.label, x: ix, y: cy + 1.05, w: iw, h: 0.30, font: 'B', size: 12, color: 'body' });
-   }
- });
- return els;
-}
+    if (cfg.tag) {
+      els.push({
+        type: 't', text: cfg.tag, x: C.SAFE_X_MIN, y: C.TAG_Y,
+        w: 11.00, h: C.TAG_H, font: 'H', size: 11, color: 'accent'
+      });
+    }
 
-function layoutSplit(cfg) {
- var items = cfg.items || [{}, {}];
- var cols  = colPositions(2, 0.30);
- var els   = tagTitle(cfg.tag, cfg.title);
- items.forEach(function (item, i) {
-   if (i > 1) return;
-   var col = cols[i];
-   var iw  = col.w * 0.80;
-   var ix  = col.x + (col.w - iw) / 2;
-   els.push({ type: 's', x: col.x, y: CONTENT_Y, w: col.w, h: 4.80, fill: 'cardBg', border: 'cardBorder' });
-   if (item.title) {
-     els.push({ type: 't', text: item.title, x: ix, y: CONTENT_Y + 0.25, w: iw, h: 0.35, font: 'H', size: 18, color: 'accent' });
-     els.push({ type: 'd', x: ix, y: CONTENT_Y + 0.70, w: iw, color: 'accent' });
-   }
-   if (item.text) {
-     els.push({ type: 't', text: item.text, x: ix, y: CONTENT_Y + 0.90, w: iw, h: 3.60, font: 'B', size: 13, color: 'body' });
-   }
- });
- return els;
-}
+    els.push({
+      type: 't', text: cfg.title, x: C.SAFE_X_MIN, y: C.TITLE_Y,
+      w: 11.00, h: metrics.titleH,
+      font: 'H', size: 42, color: 'title'
+    });
 
-function layoutRows(cfg) {
- var items = cfg.items || [];
- var els   = tagTitle(cfg.tag, cfg.title);
- var rowH  = 0.85;
- var gap   = 0.18;
- items.forEach(function (item, i) {
-   if (i >= SD.LIMITS.rows) return;
-   var ry = CONTENT_Y + i * (rowH + gap);
-   els.push({ type: 's', x: LEFT_X, y: ry, w: FULL_W, h: rowH, fill: 'cardBg', border: 'cardBorder' });
-   if (cfg.numbered) {
-     els.push({ type: 't', text: String(i + 1).padStart(2, '0'), x: LEFT_X + 0.20, y: ry, w: 0.80, h: rowH, font: 'H', size: 18, color: 'accent', valign: 'middle' });
-   }
-   var textX = cfg.numbered ? LEFT_X + 1.20 : LEFT_X + 0.25;
-   var maxW  = FULL_W * 0.80;
-   els.push({ type: 't', text: item.title || '', x: textX, y: ry, w: maxW * 0.30, h: rowH, font: 'H', size: 14, color: 'title', valign: 'middle' });
-   if (item.text) {
-     els.push({ type: 't', text: item.text, x: textX + maxW * 0.33, y: ry, w: maxW * 0.60, h: rowH, font: 'B', size: 12, color: 'body', valign: 'middle' });
-   }
- });
- return els;
-}
+    var subY = C.TITLE_Y + metrics.titleH + 0.15;
+    if (cfg.subtitle) {
+      els.push({
+        type: 't', text: cfg.subtitle, x: C.SAFE_X_MIN, y: subY,
+        w: 11.00, h: 0.40, font: 'H', size: 22, color: 'sub'
+      });
+    }
 
-function layoutDetail(cfg) {
- var items = cfg.items || [];
- var els   = tagTitle(cfg.tag, cfg.title);
- var cardW = 8.00;
- var cardX = (13.33 - cardW) / 2;
- var rowH  = 0.60;
- var cardH = 0.50 + items.length * rowH + 0.30;
- els.push({ type: 's', x: cardX, y: CONTENT_Y, w: cardW, h: cardH, fill: 'cardBg', border: 'cardBorder' });
- var iw = cardW * 0.80;
- var ix = cardX + (cardW - iw) / 2;
- items.forEach(function (item, i) {
-   var ry = CONTENT_Y + 0.30 + i * rowH;
-   if (item.icon) {
-     els.push({ type: 'i', icon: item.icon, x: ix, y: ry + 0.05, w: 0.35, h: 0.35 });
-   }
-   var labelX = item.icon ? ix + 0.45 : ix;
-   els.push({ type: 't', text: item.label || '', x: labelX, y: ry, w: iw * 0.35, h: rowH, font: 'H', size: 12, color: 'muted', valign: 'middle' });
-   els.push({ type: 't', text: item.value || '', x: labelX + iw * 0.38, y: ry, w: iw * 0.55, h: rowH, font: 'B', size: 13, color: 'title', valign: 'middle' });
-   if (i < items.length - 1) {
-     els.push({ type: 'd', x: ix, y: ry + rowH - 0.02, w: iw, color: 'ltGray' });
-   }
- });
- return els;
-}
+    var dateY = subY + 0.50;
+    if (cfg.date) {
+      els.push({
+        type: 't', text: cfg.date, x: C.SAFE_X_MIN, y: dateY,
+        w: 11.00, h: 0.30, font: 'B', size: 13, color: 'body'
+      });
+    }
+    return els;
+  }
 
-function layoutBullets(cfg) {
- var items = cfg.items || [];
- var els   = tagTitle(cfg.tag, cfg.title);
- var bulletH = 0.45;
- var bulletGap = 0.10;
- items.forEach(function (text, i) {
-   if (i >= SD.LIMITS.bullets) return;
-   var by = CONTENT_Y + i * (bulletH + bulletGap);
-   els.push({ type: 'o', x: LEFT_X + 0.10, y: by + 0.15, w: 0.12, h: 0.12, fill: 'accent' });
-   els.push({ type: 't', text: text, x: LEFT_X + 0.40, y: by, w: FULL_W - 0.50, h: bulletH, font: 'B', size: 15, color: 'body', valign: 'middle' });
- });
- return els;
-}
+  // ============================================================
+  // LAYOUT: CLOSING (unique positioning, always dark)
+  // ============================================================
+  function layoutClosing(cfg) {
+    var els = [];
+    var metrics = SD.getTitleMetrics(cfg.title);
 
-var LAYOUT_MAP = {
- cover:    layoutCover,
- closing:  layoutClosing,
- divider:  layoutDivider,
- agenda:   layoutAgenda,
- cards:    layoutCards,
- stats:    layoutStats,
- metrics:  layoutMetrics,
- split:    layoutSplit,
- rows:     layoutRows,
- detail:   layoutDetail,
- bullets:  layoutBullets
-};
+    els.push({
+      type: 't', text: cfg.title, x: C.SAFE_X_MIN, y: C.TITLE_Y,
+      w: 11.00, h: metrics.titleH,
+      font: 'H', size: 42, color: 'title'
+    });
 
-function dispatch(slideData) {
- var fn = LAYOUT_MAP[slideData.layout];
- if (!fn) {
-   console.warn('[deck-layouts] Unknown layout: ' + slideData.layout);
-   return [];
- }
- return fn(slideData);
-}
+    var subY = C.TITLE_Y + metrics.titleH + 0.15;
+    if (cfg.subtitle) {
+      els.push({
+        type: 't', text: cfg.subtitle, x: C.SAFE_X_MIN, y: subY,
+        w: 11.00, h: 0.40, font: 'H', size: 22, color: 'sub'
+      });
+    }
 
-window.DeckLayouts = {
- dispatch: dispatch,
- layouts:  LAYOUT_MAP,
- cover: layoutCover, closing: layoutClosing,
- divider: layoutDivider, agenda: layoutAgenda,
- cards: layoutCards, stats: layoutStats,
- metrics: layoutMetrics, split: layoutSplit,
- rows: layoutRows, detail: layoutDetail,
- bullets: layoutBullets
-};
+    if (cfg.attribution) {
+      els.push({
+        type: 't', text: cfg.attribution, x: C.SAFE_X_MIN,
+        y: subY + 0.50, w: 11.00, h: 0.30,
+        font: 'B', size: 11, color: 'body'
+      });
+    }
+    return els;
+  }
+
+  // ============================================================
+  // LAYOUT: DIVIDER (unique positioning, always dark)
+  // ============================================================
+  function layoutDivider(cfg) {
+    var centerY = (C.SLIDE_H - 1.50) / 2;
+    var els = [{
+      type: 't', text: cfg.title, x: C.SAFE_X_MIN, y: centerY,
+      w: 11.00, h: 0.70, font: 'H', size: 42,
+      color: 'title', valign: 'middle'
+    }];
+
+    if (cfg.subtitle) {
+      els.push({
+        type: 't', text: cfg.subtitle, x: C.SAFE_X_MIN,
+        y: centerY + 0.80, w: 11.00, h: 0.40,
+        font: 'B', size: 18, color: 'sub'
+      });
+    }
+    return els;
+  }
+
+  // ============================================================
+  // LAYOUT: CARDS (2/3/4 columns)
+  // ============================================================
+  function layoutCards(cfg) {
+    var header = renderHeader(cfg);
+    var els = header.els;
+    var startY = header.contentY;
+    var isDark = cfg.dark === 1;
+
+    var items = cfg.items || [];
+    var cols = cfg.columns || 3;
+    var grid = getGrid(cols);
+    var rows = Math.ceil(items.length / cols);
+
+    var availH = C.CONTENT_END - startY;
+    var cardH = (availH - (C.GAP * (rows - 1))) / rows;
+
+    items.forEach(function(item, i) {
+      var col = i % cols;
+      var row = Math.floor(i / cols);
+      var cx = grid.cols[col].x;
+      var cw = grid.cols[col].w;
+      var cy = startY + row * (cardH + C.GAP);
+
+      els.push({
+        type: 's', x: cx, y: cy, w: cw, h: cardH,
+        fill: 'cardBg', border: isDark ? null : 'cardBorder'
+      });
+
+      var textW = cw * C.TEXT_RATIO;
+      var textX = cx + (cw - textW) / 2;
+      var innerY = cy + 0.20;
+
+      if (item.icon) {
+        els.push({ type: 'i', icon: item.icon, x: textX, y: innerY, w: 0.50, h: 0.50 });
+        innerY += 0.60;
+      }
+      if (item.title) {
+        els.push({ type: 't', text: item.title, x: textX, y: innerY, w: textW, h: 0.30, font: 'H', size: 15, color: 'title' });
+        innerY += 0.40;
+      }
+      if (item.text) {
+        els.push({ type: 't', text: item.text, x: textX, y: innerY, w: textW, h: cardH - (innerY - cy) - 0.60, font: 'B', size: 13, color: 'body' });
+      }
+      if (item.pill) {
+        els.push({ type: 'p', text: item.pill, x: textX, y: cy + cardH - 0.45, w: 1.50, h: 0.30, fill: item.pillColor || 'accent', color: '#FFFFFF', size: 9 });
+      }
+    });
+    return els;
+  }
+
+  // ============================================================
+  // LAYOUT: STATS (big number grid)
+  // ============================================================
+  function layoutStats(cfg) {
+    var header = renderHeader(cfg);
+    var els = header.els;
+    var startY = header.contentY;
+    var isDark = cfg.dark === 1;
+
+    var items = cfg.items || [];
+    var cols = cfg.columns || 3;
+    var rows = cfg.rows || 2;
+    var grid = getGrid(cols);
+
+    var availH = C.CONTENT_END - startY;
+    var cellH = (availH - (C.GAP * (rows - 1))) / rows;
+
+    items.forEach(function(item, i) {
+      var col = i % cols;
+      var row = Math.floor(i / cols);
+      var cx = grid.cols[col].x;
+      var cw = grid.cols[col].w;
+      var cy = startY + row * (cellH + C.GAP);
+      var textW = cw * C.TEXT_RATIO;
+      var textX = cx + (cw - textW) / 2;
+
+      els.push({ type: 's', x: cx, y: cy, w: cw, h: cellH, fill: 'cardBg', border: isDark ? null : 'cardBorder' });
+      els.push({ type: 't', text: item.value, x: textX, y: cy + 0.20, w: textW, h: 0.60, font: 'H', size: 44, color: 'accent' });
+      els.push({ type: 't', text: item.label, x: textX, y: cy + 0.90, w: textW, h: 0.25, font: 'H', size: 13, color: 'title' });
+      if (item.text) {
+        els.push({ type: 't', text: item.text, x: textX, y: cy + 1.25, w: textW, h: cellH - 1.55, font: 'B', size: 11, color: 'body' });
+      }
+    });
+    return els;
+  }
+
+  // ============================================================
+  // LAYOUT: METRICS (KPI dashboard with trends)
+  // ============================================================
+  function layoutMetrics(cfg) {
+    var header = renderHeader(cfg);
+    var els = header.els;
+    var startY = header.contentY;
+    var isDark = cfg.dark === 1;
+
+    var items = cfg.items || [];
+    var cols = Math.min(items.length, 4);
+    var rows = Math.ceil(items.length / cols);
+    var grid = getGrid(cols);
+
+    var availH = C.CONTENT_END - startY;
+    var cellH = (availH - (C.GAP * (rows - 1))) / rows;
+
+    items.forEach(function(item, i) {
+      var col = i % cols;
+      var row = Math.floor(i / cols);
+      var cx = grid.cols[col].x;
+      var cw = grid.cols[col].w;
+      var cy = startY + row * (cellH + C.GAP);
+      var textW = cw * C.TEXT_RATIO;
+      var textX = cx + (cw - textW) / 2;
+
+      els.push({ type: 's', x: cx, y: cy, w: cw, h: cellH, fill: 'cardBg', border: isDark ? null : 'cardBorder' });
+      els.push({ type: 't', text: item.value, x: textX, y: cy + 0.30, w: textW * 0.60, h: 0.60, font: 'H', size: 44, color: 'title' });
+
+      if (item.trend) {
+        var trendColor = item.trendDir === 'up' ? 'ok' : 'bad';
+        var arrow = item.trendDir === 'up' ? 'â–²' : 'â–¼';
+        els.push({ type: 'p', text: arrow + ' ' + item.trend, x: textX + (textW * 0.60) + 0.15, y: cy + 0.40, w: 1.20, h: 0.30, fill: trendColor, color: '#FFFFFF', size: 10 });
+      }
+      els.push({ type: 't', text: item.label, x: textX, y: cy + 1.05, w: textW, h: 0.25, font: 'B', size: 13, color: 'body' });
+    });
+    return els;
+  }
+
+  // ============================================================
+  // LAYOUT: SPLIT (two-column comparison)
+  // ============================================================
+  function layoutSplit(cfg) {
+    var header = renderHeader(cfg);
+    var els = header.els;
+    var startY = header.contentY;
+    var isDark = cfg.dark === 1;
+
+    var items = cfg.items || [];
+    var grid = C.GRID.col2;
+    var availH = C.CONTENT_END - startY;
+
+    items.forEach(function(item, i) {
+      if (i > 1) return;
+      var cx = grid.cols[i].x;
+      var cw = grid.cols[i].w;
+      var textW = cw * C.TEXT_RATIO;
+      var textX = cx + (cw - textW) / 2;
+
+      els.push({ type: 's', x: cx, y: startY, w: cw, h: availH, fill: 'cardBg', border: isDark ? null : 'cardBorder' });
+      els.push({ type: 't', text: item.title, x: textX, y: startY + 0.25, w: textW, h: 0.35, font: 'H', size: 18, color: 'title' });
+      els.push({ type: 'd', x: textX, y: startY + 0.70, w: textW, color: 'ltGray' });
+      els.push({ type: 't', text: item.text, x: textX, y: startY + 0.90, w: textW, h: availH - 1.20, font: 'B', size: 13, color: 'body' });
+    });
+    return els;
+  }
+
+  // ============================================================
+  // LAYOUT: ROWS (full-width items)
+  // ============================================================
+  function layoutRows(cfg) {
+    var header = renderHeader(cfg);
+    var els = header.els;
+    var startY = header.contentY;
+    var isDark = cfg.dark === 1;
+
+    var items = cfg.items || [];
+    var numbered = !!cfg.numbered;
+    var availH = C.CONTENT_END - startY;
+    var rowH = Math.min(0.90, (availH - (C.GAP * (items.length - 1))) / items.length);
+
+    items.forEach(function(item, i) {
+      var ry = startY + i * (rowH + C.GAP);
+      els.push({ type: 's', x: C.SAFE_X_MIN, y: ry, w: C.SAFE_W, h: rowH, fill: 'cardBg' });
+
+      var textStartX = C.SAFE_X_MIN + 0.20;
+      if (numbered) {
+        var num = String(i + 1).padStart(2, '0');
+        els.push({ type: 't', text: num, x: C.SAFE_X_MIN + 0.20, y: ry, w: 1.00, h: rowH, font: 'H', size: 22, color: 'accent', valign: 'middle' });
+        textStartX = C.SAFE_X_MIN + 1.30;
+      }
+
+      els.push({ type: 't', text: item.title, x: textStartX, y: ry, w: 3.50, h: rowH, font: 'H', size: 13, color: 'title', valign: 'middle' });
+      els.push({ type: 't', text: item.text, x: textStartX + 3.70, y: ry, w: C.SAFE_W - textStartX - 3.70 + C.SAFE_X_MIN - 0.20, h: rowH, font: 'B', size: 11, color: 'body', valign: 'middle' });
+    });
+    return els;
+  }
+
+  // ============================================================
+  // LAYOUT: AGENDA (a special case of Rows)
+  // ============================================================
+  function layoutAgenda(cfg) {
+    // Default to numbered unless explicitly false
+    cfg.numbered = cfg.numbered !== false;
+    return layoutRows(cfg);
+  }
+
+  // ============================================================
+  // LAYOUT: DETAIL (centered key-value card)
+  // ============================================================
+  function layoutDetail(cfg) {
+    var header = renderHeader(cfg);
+    var els = header.els;
+    var startY = header.contentY;
+    var isDark = cfg.dark === 1;
+
+    var items = cfg.items || [];
+    var availH = C.CONTENT_END - startY;
+    var cardW = 8.00;
+    var cardX = C.SAFE_X_MIN + (C.SAFE_W - cardW) / 2;
+    var cardH = Math.min(availH, items.length * 0.60 + 0.40);
+    var cardY = startY + (availH - cardH) / 2;
+
+    els.push({ type: 's', x: cardX, y: cardY, w: cardW, h: cardH, fill: 'cardBg', border: isDark ? null : 'cardBorder' });
+
+    var textW = cardW * C.TEXT_RATIO;
+    var innerX = cardX + (cardW - textW) / 2;
+    var rowH = 0.50;
+
+    items.forEach(function(item, i) {
+      var iy = cardY + 0.20 + i * rowH;
+      if (item.icon) {
+        els.push({ type: 'i', icon: item.icon, x: innerX, y: iy, w: 0.40, h: 0.40 });
+      }
+      els.push({ type: 't', text: item.label, x: innerX + 0.60, y: iy, w: 2.50, h: 0.40, font: 'H', size: 13, color: 'muted', valign: 'middle' });
+      els.push({ type: 't', text: item.value, x: innerX + 3.30, y: iy, w: textW - 3.30, h: 0.40, font: 'B', size: 13, color: 'title', valign: 'middle' });
+
+      if (i < items.length - 1) {
+        els.push({ type: 'd', x: innerX, y: iy + 0.48, w: textW, color: 'ltGray' });
+      }
+    });
+    return els;
+  }
+
+  // ============================================================
+  // LAYOUT: BULLETS (simple list)
+  // ============================================================
+  function layoutBullets(cfg) {
+    var header = renderHeader(cfg);
+    var els = header.els;
+    var startY = header.contentY;
+    var items = cfg.items || [];
+
+    var bulletH = 0.55;
+    var bulletX = C.SAFE_X_MIN + 0.40;
+    var bulletW = 10.00;
+
+    items.forEach(function(item, i) {
+      var by = startY + i * bulletH;
+      els.push({ type: 'o', x: C.SAFE_X_MIN + 0.10, y: by + 0.18, w: 0.12, h: 0.12, fill: 'accent' });
+      els.push({ type: 't', text: item, x: bulletX, y: by, w: bulletW, h: bulletH, font: 'B', size: 15, color: 'body', valign: 'middle' });
+    });
+    return els;
+  }
+
+  // ============================================================
+  // LAYOUT DISPATCHER
+  // ============================================================
+  var LAYOUT_MAP = {
+    cover:    layoutCover,
+    closing:  layoutClosing,
+    divider:  layoutDivider,
+    agenda:   layoutAgenda,
+    cards:    layoutCards,
+    stats:    layoutStats,
+    metrics:  layoutMetrics,
+    split:    layoutSplit,
+    rows:     layoutRows,
+    detail:   layoutDetail,
+    bullets:  layoutBullets
+  };
+
+  /**
+   * Main entry point for this module. Takes slide data and returns
+   * an array of `els` to be rendered.
+   * @param {object} slideData - A slide object from the D array.
+   * @returns {Array} An array of element objects for rendering.
+   */
+  function dispatch(slideData) {
+    var fn = LAYOUT_MAP[slideData.layout];
+    if (fn) {
+      return fn(slideData);
+    }
+    // If layout is unknown, but `els` are provided, pass them through.
+    if (slideData.els) {
+      return slideData.els;
+    }
+    console.warn('[deck-layouts] Unknown layout without fallback `els`: "' + slideData.layout + '"');
+    return []; // Return empty array if layout is not found.
+  }
+
+  // ============================================================
+  // PUBLIC API
+  // ============================================================
+  window.DeckLayouts = {
+    dispatch: dispatch
+  };
 
 })();

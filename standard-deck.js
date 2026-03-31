@@ -1,7 +1,7 @@
 /* ============================================================
- standard-deck.js v5.1.2 -- Core Rendering Engine
+ standard-deck.js v5.1.3 -- Core Rendering Engine
  Standard Presentation Builder
- Phase 1 fix: title text overflow:visible for descender clipping
+ Phase 1.5: Footer redesign, text alignment, icon centering
  ============================================================ */
 
 (function () {
@@ -101,6 +101,19 @@ var MIN_SIZES = {
   subtitle: 18, body: 15, table: 12,
   statValue: 42, tag: 10, footnote: 9
 };
+
+// ============================================================
+// V5.1.3: DATE GENERATION
+// ============================================================
+
+var MONTHS = ['JANUARY','FEBRUARY','MARCH','APRIL','MAY',
+  'JUNE','JULY','AUGUST','SEPTEMBER','OCTOBER',
+  'NOVEMBER','DECEMBER'];
+
+function getFooterDate() {
+  var now = new Date();
+  return MONTHS[now.getMonth()] + ' ' + now.getFullYear();
+}
 
 // ============================================================
 // COLOR RESOLUTION
@@ -290,9 +303,8 @@ function renderElement(el, isDark) {
   return fn(el, isDark);
 }
 
-// PHASE 1 FIX: Title text (>=30pt) uses overflow:visible to prevent
-// descender clipping on letters like g, y, p in the preview.
-// Body text keeps overflow:hidden to prevent card overflow.
+// PHASE 1 FIX: overflow:visible for titles
+// PHASE 1.5 FIX: textAlign support + compact auto-center
 function renderText(el, isDark) {
   var div = document.createElement('div');
   var isTitle = (el.size >= 30);
@@ -309,10 +321,19 @@ function renderText(el, isDark) {
   div.style.fontWeight = fm.weight;
   if (el.bold) div.style.fontWeight = 700;
   if (el.italic) div.style.fontStyle = 'italic';
+
+  // PHASE 1.5: Text alignment with compact auto-center
+  var isCompact = el.w <= 0.80 && el.h <= 0.80;
+  div.style.textAlign = el.align || (isCompact ? 'center' : 'left');
+
   if (el.valign === 'middle' || el.valign === 'bottom') {
     div.style.display = 'flex';
     div.style.flexDirection = 'column';
     div.style.justifyContent = el.valign === 'middle' ? 'center' : 'flex-end';
+    // Preserve textAlign inside flex container
+    if (isCompact || el.align === 'center') {
+      div.style.alignItems = 'center';
+    }
   }
   if (el.text && el.text.indexOf('\n') > -1) {
     el.text.split('\n').forEach(function (line, i) {
@@ -350,14 +371,15 @@ function renderOval(el, isDark) {
   return div;
 }
 
+// PHASE 1.5 FIX: Reduced scale 0.6→0.5, added line-height:1
 function renderIcon(el) {
   var div = document.createElement('div');
-  div.style.cssText = 'position:absolute;display:flex;align-items:center;justify-content:center;';
+  div.style.cssText = 'position:absolute;display:flex;align-items:center;justify-content:center;line-height:1;';
   div.style.left     = toX(el.x) + 'px';
   div.style.top      = toY(el.y) + 'px';
   div.style.width    = toX(el.w) + 'px';
   div.style.height   = toY(el.h) + 'px';
-  div.style.fontSize = Math.min(toX(el.w), toY(el.h)) * 0.6 + 'px';
+  div.style.fontSize = Math.min(toX(el.w), toY(el.h)) * 0.5 + 'px';
   div.textContent    = el.icon || '';
   return div;
 }
@@ -665,6 +687,7 @@ function renderImage(el) {
 
 // ============================================================
 // SLIDE RENDERING
+// V5.1.3: New footer — date left, number+logo+divider right
 // ============================================================
 
 function renderSlide(slideData, index) {
@@ -672,16 +695,14 @@ function renderSlide(slideData, index) {
   var slide = document.createElement('div');
   slide.className = 'slide' + (index === 0 ? ' active' : '');
   slide.style.cssText = 'position:absolute;top:0;left:0;width:1920px;height:1200px;overflow:hidden;background:' + resolveColor('slideBg', isDark) + ';';
+
+  // Brand bar (left edge)
   var brandBar = document.createElement('div');
   brandBar.style.cssText = 'position:absolute;left:0;top:0;width:8px;height:100%;background:' + resolveColor('accent', isDark) + ';';
   brandBar.setAttribute('data-accent', 'backgroundColor');
   slide.appendChild(brandBar);
-  if (slideData.num) {
-    var numDiv = document.createElement('div');
-    numDiv.style.cssText = 'position:absolute;right:40px;top:30px;font-size:' + ptToPx(10) + 'px;font-weight:600;color:' + resolveColor('muted', isDark) + ';font-family:DM Sans,sans-serif;';
-    numDiv.textContent = slideData.num;
-    slide.appendChild(numDiv);
-  }
+
+  // Render slide content (layouts or raw els)
   var els;
   if (slideData.layout) {
     els = window.DeckLayouts ? window.DeckLayouts.dispatch(slideData) : [];
@@ -693,10 +714,48 @@ function renderSlide(slideData, index) {
     validatePosition(el, index);
     slide.appendChild(renderElement(el, isDark));
   });
-  var footer = document.createElement('div');
-  footer.style.cssText = 'position:absolute;bottom:20px;left:40px;font-size:' + ptToPx(8) + 'px;color:' + resolveColor('muted', isDark) + ';font-family:DM Sans,sans-serif;';
-  footer.textContent = 'Confidential';
-  slide.appendChild(footer);
+
+  // PHASE 1.5: Bottom-left date (replaces "Confidential")
+  var mutedColor = resolveColor('muted', isDark);
+  var dateDiv = document.createElement('div');
+  dateDiv.style.cssText = 'position:absolute;bottom:24px;left:40px;'
+    + 'font-size:' + ptToPx(9) + 'px;'
+    + 'font-weight:500;'
+    + 'letter-spacing:0.15em;'
+    + 'text-transform:uppercase;'
+    + 'color:' + mutedColor + ';'
+    + 'font-family:DM Sans,sans-serif;';
+  dateDiv.textContent = getFooterDate();
+  slide.appendChild(dateDiv);
+
+  // PHASE 1.5: Bottom-right number + logo slot + divider
+  if (slideData.num) {
+    var footerRight = document.createElement('div');
+    footerRight.style.cssText = 'position:absolute;bottom:24px;'
+      + 'right:40px;display:flex;align-items:center;gap:12px;'
+      + 'font-family:DM Sans,sans-serif;';
+
+    // Logo slot (populated by applyLogoToSlides when user uploads)
+    var logoSlot = document.createElement('div');
+    logoSlot.className = 'logo-footer-slot';
+    logoSlot.style.cssText = 'display:flex;align-items:center;';
+    footerRight.appendChild(logoSlot);
+
+    // Thin vertical divider
+    var divLine = document.createElement('div');
+    divLine.style.cssText = 'width:1px;height:20px;background:' + mutedColor + ';';
+    footerRight.appendChild(divLine);
+
+    // Slide number
+    var numSpan = document.createElement('span');
+    numSpan.style.cssText = 'font-size:' + ptToPx(10) + 'px;'
+      + 'font-weight:600;color:' + mutedColor + ';';
+    numSpan.textContent = slideData.num;
+    footerRight.appendChild(numSpan);
+
+    slide.appendChild(footerRight);
+  }
+
   return slide;
 }
 
@@ -761,6 +820,7 @@ window.StandardDeck = {
   validatePosition: validatePosition,
   enforceWidthRule: enforceWidthRule,
   getTitleMetrics:  getTitleMetrics,
+  getFooterDate:    getFooterDate,
   toX: toX, toY: toY, ptToPx: ptToPx,
   PALETTE:          PALETTE,
   ACCENT_FAMILIES:  ACCENT_FAMILIES,

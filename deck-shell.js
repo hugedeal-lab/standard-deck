@@ -1,8 +1,7 @@
 /* ============================================================
- deck-shell.js v5.1.4 -- UI Shell & PPTX Export
+ deck-shell.js v5.1.5 -- UI Shell & PPTX Export
  Depends on: standard-deck.js, deck-layouts.js, pptxgen.bundle.js
- Phase 1.5: Footer redesign, logo auto-invert (pixel-level),
-            PPTX alignment, compact text handling
+ v5.1.5: Fixed logo invert logic — inverted used on opposite bg
  ============================================================ */
 
 (function () {
@@ -25,7 +24,7 @@ var _noLogo        = false;
 var _imageMode     = false;
 
 // ============================================================
-// STYLES — V5.1.4: Top toolbar
+// STYLES
 // ============================================================
 
 function injectStyles() {
@@ -277,7 +276,7 @@ updateNotes();
 }
 
 // ============================================================
-// V5.1.1: TOP TOOLBAR
+// TOP TOOLBAR
 // ============================================================
 
 function buildToolbar(container) {
@@ -320,7 +319,7 @@ return toolbar;
 }
 
 // ============================================================
-// V5.1.1: COLOR PICKER (dropdown below toolbar button)
+// COLOR PICKER
 // ============================================================
 
 function buildColorPicker(toolbarRight) {
@@ -394,7 +393,7 @@ if (toolbar) {
 }
 
 // ============================================================
-// V5.1.1: NOTES SIDE PANEL
+// NOTES SIDE PANEL
 // ============================================================
 
 function buildNotesPanel(container) {
@@ -444,7 +443,7 @@ panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
 
 // ============================================================
 // LOGO MANAGER
-// V5.1.4: Pixel-level inversion for dark/light auto-handling
+// v5.1.5: Fixed invert logic — inverted goes on OPPOSITE bg
 // ============================================================
 
 function buildLogoPanel(container) {
@@ -487,7 +486,7 @@ panel.querySelector('.sd-logo-upload').addEventListener('click', function () {
   panel.querySelector('.sd-logo-file').click();
 });
 
-// V5.1.4: Pixel-level inversion (cross-browser, no canvas.filter)
+// Pixel-level inversion for cross-browser support
 panel.querySelector('.sd-logo-file').addEventListener('change', function (e) {
   var file = e.target.files[0];
   if (!file) return;
@@ -502,7 +501,6 @@ panel.querySelector('.sd-logo-file').addEventListener('change', function (e) {
     tempImg.onload = function () {
       var aspectRatio = tempImg.naturalHeight / tempImg.naturalWidth;
 
-      // Generate inverted variant via pixel manipulation
       var invertCanvas = document.createElement('canvas');
       invertCanvas.width = tempImg.naturalWidth;
       invertCanvas.height = tempImg.naturalHeight;
@@ -512,10 +510,9 @@ panel.querySelector('.sd-logo-file').addEventListener('change', function (e) {
         0, 0, invertCanvas.width, invertCanvas.height);
       var pixels = imageData.data;
       for (var p = 0; p < pixels.length; p += 4) {
-        pixels[p]     = 255 - pixels[p];     // R
-        pixels[p + 1] = 255 - pixels[p + 1]; // G
-        pixels[p + 2] = 255 - pixels[p + 2]; // B
-        // pixels[p + 3] = alpha — leave unchanged
+        pixels[p]     = 255 - pixels[p];
+        pixels[p + 1] = 255 - pixels[p + 1];
+        pixels[p + 2] = 255 - pixels[p + 2];
       }
       ictx.putImageData(imageData, 0, 0);
       var invertedUri = invertCanvas.toDataURL('image/png');
@@ -558,16 +555,18 @@ panel.querySelector('.sd-logo-remove').addEventListener('click', function () {
 return panel;
 }
 
-// Logo placement with dark/light auto-invert and footer slot
+// v5.1.5 FIX: Original on dark slides, inverted on light slides
+// Works for both white-on-transparent AND dark logos
 function applyLogoToSlides() {
 removeLogoFromSlides();
 var slides = document.querySelectorAll(
   '#sd-viewport .slide, #sw .sf');
 slides.forEach(function (slide, i) {
   var isDark = _D[i] && _D[i].dark;
-  var logoSrc = isDark && _customLogo.srcInverted
-    ? _customLogo.srcInverted
-    : _customLogo.src;
+  // Original stays on dark bg, inverted goes on light bg
+  var logoSrc = isDark
+    ? _customLogo.src
+    : _customLogo.srcInverted;
 
   var img = document.createElement('img');
   img.src = logoSrc;
@@ -575,7 +574,6 @@ slides.forEach(function (slide, i) {
 
   var pos = _customLogo.position || 'bottom-right';
 
-  // Bottom-right: place in footer slot next to divider/number
   if (pos === 'bottom-right') {
     var slot = slide.querySelector('.logo-footer-slot');
     if (slot) {
@@ -586,7 +584,6 @@ slides.forEach(function (slide, i) {
     }
   }
 
-  // All other positions: absolute positioning
   img.style.position = 'absolute';
   img.style.width = _customLogo.width + 'px';
   img.style.height = 'auto';
@@ -611,7 +608,7 @@ panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
 }
 
 // ============================================================
-// V5.1.1: TOAST NOTIFICATIONS
+// TOAST NOTIFICATIONS
 // ============================================================
 
 function showToast(message, type) {
@@ -628,7 +625,7 @@ setTimeout(function () {
 }
 
 // ============================================================
-// V5.1.1: KEYBOARD SHORTCUTS
+// KEYBOARD SHORTCUTS
 // ============================================================
 
 function setupKeyboard() {
@@ -675,12 +672,11 @@ if (!vp || _imageMode) return;
 SD.renderAll(_D, vp);
 _totalSlides = _D.length;
 showSlide(_currentSlide);
-// Re-apply logo after rerender
 if (_customLogo) applyLogoToSlides();
 }
 
 // ============================================================
-// V5.1.3: PPTX EXPORT — Footer redesign + logo auto-invert
+// PPTX EXPORT
 // ============================================================
 
 function exportPPTX() {
@@ -757,17 +753,14 @@ try {
       exportElement(slide, el, isDark, accent, pptx);
     });
 
-    // Slide number bottom-right + divider line
     if (slideData.num) {
       var numColor = isDark ? '8B8C81' : '53544A';
 
-      // Divider line
       slide.addShape(pptx.shapes.RECTANGLE, {
         x: 12.15, y: 7.05, w: 0.01, h: 0.25,
         fill: { color: numColor }
       });
 
-      // Number
       slide.addText(slideData.num, {
         x: 12.30, y: 7.05, w: 0.80, h: 0.30,
         fontSize: 10, fontFace: FONT,
@@ -778,11 +771,11 @@ try {
 
     if (slideData.notes) slide.addNotes(slideData.notes);
 
-    // Logo with auto-invert + position-aware placement
+    // v5.1.5 FIX: Original on dark, inverted on light
     if (_customLogo && !_noLogo) {
-      var logoSrc = isDark && _customLogo.srcInverted
-        ? _customLogo.srcInverted
-        : _customLogo.src;
+      var logoSrc = isDark
+        ? _customLogo.src
+        : _customLogo.srcInverted;
       var logoWInches = _customLogo.width / 144;
       var logoHInches = logoWInches * (_customLogo.aspectRatio || 0.5);
       var pos = _customLogo.position || 'bottom-right';
@@ -1040,7 +1033,7 @@ return title.replace(/[^a-zA-Z0-9\s_-]/g, '').replace(/\s+/g, '_').substring(0, 
 }
 
 // ============================================================
-// V5.1.3: UPDATED deckInit()
+// deckInit()
 // ============================================================
 
 function deckInit(config) {

@@ -1,7 +1,7 @@
 /* ============================================================
- deck-layouts.js v5.1.2 -- Layout Shortcut Library
+ deck-layouts.js v5.1.3 -- Layout Shortcut Library
  Depends on: standard-deck.js (for SD_CONST, getTitleMetrics)
- Phase 1 fixes: stats spacing, metrics width + arrows
+ Phase 1.5: Stats gap fix, metrics auto-sizing + pill containment
  ============================================================ */
 
 (function () {
@@ -208,7 +208,7 @@ function layoutCards(cfg) {
 
 // ============================================================
 // LAYOUT: STATS (big number grid)
-// PHASE 1 FIX: Adjusted internal y-positions for breathing room
+// PHASE 1.5 FIX: Increased gap between value and label
 // ============================================================
 function layoutStats(cfg) {
   var header = renderHeader(cfg);
@@ -234,13 +234,13 @@ function layoutStats(cfg) {
     var textX = cx + (cw - textW) / 2;
 
     els.push({ type: 's', x: cx, y: cy, w: cw, h: cellH, fill: 'cardBg', border: isDark ? null : 'cardBorder' });
-    // PHASE 1 FIX: value y 0.20→0.25, h 0.60→0.55
-    els.push({ type: 't', text: item.value, x: textX, y: cy + 0.25, w: textW, h: 0.55, font: 'H', size: 44, color: 'accent' });
-    // PHASE 1 FIX: label y 0.90→0.85
-    els.push({ type: 't', text: item.label, x: textX, y: cy + 0.85, w: textW, h: 0.25, font: 'H', size: 13, color: 'title' });
+    // Value at top of card
+    els.push({ type: 't', text: item.value, x: textX, y: cy + 0.20, w: textW, h: 0.55, font: 'H', size: 44, color: 'accent' });
+    // PHASE 1.5 FIX: Label pushed down from 0.85 → 1.00 for 0.20" gap
+    els.push({ type: 't', text: item.label, x: textX, y: cy + 1.00, w: textW, h: 0.25, font: 'H', size: 13, color: 'title' });
     if (item.text) {
-      // PHASE 1 FIX: description y 1.25→1.15, remaining h 1.55→1.40
-      els.push({ type: 't', text: item.text, x: textX, y: cy + 1.15, w: textW, h: cellH - 1.40, font: 'B', size: 11, color: 'body' });
+      // PHASE 1.5 FIX: Description pushed down from 1.15 → 1.30
+      els.push({ type: 't', text: item.text, x: textX, y: cy + 1.30, w: textW, h: cellH - 1.55, font: 'B', size: 11, color: 'body' });
     }
   });
   return els;
@@ -248,7 +248,8 @@ function layoutStats(cfg) {
 
 // ============================================================
 // LAYOUT: METRICS (KPI dashboard with trends)
-// PHASE 1 FIX: Wider value text, Unicode arrow escapes
+// PHASE 1.5 FIX: Auto-sizing values, pill containment,
+//                Unicode arrow escapes
 // ============================================================
 function layoutMetrics(cfg) {
   var header = renderHeader(cfg);
@@ -264,27 +265,51 @@ function layoutMetrics(cfg) {
   var availH = C.CONTENT_END - startY;
   var cellH = (availH - (C.GAP * (rows - 1))) / rows;
 
+  // PHASE 1.5: Auto-size — find longest value, scale if needed
+  var sampleTextW = grid.cols[0].w * C.TEXT_RATIO;
+  var maxValueLen = 0;
+  items.forEach(function(item) {
+    if (item.value && item.value.length > maxValueLen) {
+      maxValueLen = item.value.length;
+    }
+  });
+
+  var valueSize = 44;
+  var estimatedWidth = maxValueLen * 0.40;
+  var availableWidth = sampleTextW * 0.85;
+
+  if (estimatedWidth > availableWidth) {
+    valueSize = Math.max(28, Math.floor(44 * (availableWidth / estimatedWidth)));
+  }
+
   items.forEach(function(item, i) {
     var col = i % cols;
     var row = Math.floor(i / cols);
     var cx = grid.cols[col].x;
     var cw = grid.cols[col].w;
     var cy = startY + row * (cellH + C.GAP);
-    var textW = cw * C.TEXT_RATIO;
-    var textX = cx + (cw - textW) / 2;
+    var itemTextW = cw * C.TEXT_RATIO;
+    var textX = cx + (cw - itemTextW) / 2;
 
     els.push({ type: 's', x: cx, y: cy, w: cw, h: cellH, fill: 'cardBg', border: isDark ? null : 'cardBorder' });
-    // PHASE 1 FIX: value width 0.60→0.70 to prevent line breaks
-    els.push({ type: 't', text: item.value, x: textX, y: cy + 0.30, w: textW * 0.70, h: 0.60, font: 'H', size: 44, color: 'title' });
 
+    // PHASE 1.5: Full-width value text with auto-sized font
+    els.push({ type: 't', text: item.value, x: textX, y: cy + 0.30, w: itemTextW, h: 0.60, font: 'H', size: valueSize, color: 'title' });
+
+    // PHASE 1.5: Trend pill — constrained inside card boundary
     if (item.trend) {
       var trendColor = item.trendDir === 'up' ? 'ok' : 'bad';
-      // PHASE 1 FIX: Unicode escapes instead of mojibake characters
       var arrow = item.trendDir === 'up' ? '\u25B2' : '\u25BC';
-      // PHASE 1 FIX: pill x adjusted to match new value width
-      els.push({ type: 'p', text: arrow + ' ' + item.trend, x: textX + (textW * 0.70) + 0.10, y: cy + 0.40, w: 1.20, h: 0.30, fill: trendColor, color: '#FFFFFF', size: 10 });
+      var pillW = 1.20;
+      var pillX = Math.min(
+        textX + itemTextW - pillW,
+        cx + cw - pillW - 0.15
+      );
+      els.push({ type: 'p', text: arrow + ' ' + item.trend, x: pillX, y: cy + 0.15, w: pillW, h: 0.28, fill: trendColor, color: '#FFFFFF', size: 9 });
     }
-    els.push({ type: 't', text: item.label, x: textX, y: cy + 1.05, w: textW, h: 0.25, font: 'B', size: 13, color: 'body' });
+
+    // Label below value
+    els.push({ type: 't', text: item.label, x: textX, y: cy + 1.05, w: itemTextW, h: 0.25, font: 'B', size: 13, color: 'body' });
   });
   return els;
 }

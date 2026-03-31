@@ -1,7 +1,8 @@
 /* ============================================================
- deck-shell.js v5.1.3 -- UI Shell & PPTX Export
+ deck-shell.js v5.1.4 -- UI Shell & PPTX Export
  Depends on: standard-deck.js, deck-layouts.js, pptxgen.bundle.js
- Phase 1.5: Footer redesign, logo auto-invert, PPTX alignment
+ Phase 1.5: Footer redesign, logo auto-invert (pixel-level),
+            PPTX alignment, compact text handling
  ============================================================ */
 
 (function () {
@@ -24,7 +25,7 @@ var _noLogo        = false;
 var _imageMode     = false;
 
 // ============================================================
-// STYLES — V5.1.3: Top toolbar
+// STYLES — V5.1.4: Top toolbar
 // ============================================================
 
 function injectStyles() {
@@ -443,7 +444,7 @@ panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
 
 // ============================================================
 // LOGO MANAGER
-// V5.1.3: Auto-invert for dark/light, footer slot positioning
+// V5.1.4: Pixel-level inversion for dark/light auto-handling
 // ============================================================
 
 function buildLogoPanel(container) {
@@ -486,7 +487,7 @@ panel.querySelector('.sd-logo-upload').addEventListener('click', function () {
   panel.querySelector('.sd-logo-file').click();
 });
 
-// PHASE 1.5: Capture aspect ratio + auto-generate inverted variant
+// V5.1.4: Pixel-level inversion (cross-browser, no canvas.filter)
 panel.querySelector('.sd-logo-file').addEventListener('change', function (e) {
   var file = e.target.files[0];
   if (!file) return;
@@ -501,13 +502,22 @@ panel.querySelector('.sd-logo-file').addEventListener('change', function (e) {
     tempImg.onload = function () {
       var aspectRatio = tempImg.naturalHeight / tempImg.naturalWidth;
 
-      // Auto-generate inverted variant for dark slides
+      // Generate inverted variant via pixel manipulation
       var invertCanvas = document.createElement('canvas');
       invertCanvas.width = tempImg.naturalWidth;
       invertCanvas.height = tempImg.naturalHeight;
       var ictx = invertCanvas.getContext('2d');
-      ictx.filter = 'invert(1) brightness(2)';
       ictx.drawImage(tempImg, 0, 0);
+      var imageData = ictx.getImageData(
+        0, 0, invertCanvas.width, invertCanvas.height);
+      var pixels = imageData.data;
+      for (var p = 0; p < pixels.length; p += 4) {
+        pixels[p]     = 255 - pixels[p];     // R
+        pixels[p + 1] = 255 - pixels[p + 1]; // G
+        pixels[p + 2] = 255 - pixels[p + 2]; // B
+        // pixels[p + 3] = alpha — leave unchanged
+      }
+      ictx.putImageData(imageData, 0, 0);
       var invertedUri = invertCanvas.toDataURL('image/png');
 
       panel.querySelector('.sd-logo-preview').innerHTML =
@@ -548,8 +558,7 @@ panel.querySelector('.sd-logo-remove').addEventListener('click', function () {
 return panel;
 }
 
-// PHASE 1.5: Logo placement with dark/light auto-invert
-// and footer slot support for bottom-right position
+// Logo placement with dark/light auto-invert and footer slot
 function applyLogoToSlides() {
 removeLogoFromSlides();
 var slides = document.querySelectorAll(
@@ -701,8 +710,6 @@ try {
   pptx.subject = _config.title || 'Presentation';
 
   var accent = SD.getAccent();
-
-  // PHASE 1.5: Footer date (auto-generated)
   var dateStr = SD.getFooterDate();
 
   pptx.defineSlideMaster({
@@ -711,7 +718,6 @@ try {
     objects: [
       { rect: { x: 0, y: 0, w: 0.06, h: 7.5,
         fill: { color: accent.mid.replace('#', '') } } },
-      // Date bottom-left
       { text: { text: dateStr, options: {
         x: 0.3, y: 7.05, w: 4, h: 0.3,
         fontSize: 9, fontFace: FONT, color: '8B8C81',
@@ -726,7 +732,6 @@ try {
     objects: [
       { rect: { x: 0, y: 0, w: 0.06, h: 7.5,
         fill: { color: accent.mid.replace('#', '') } } },
-      // Date bottom-left
       { text: { text: dateStr, options: {
         x: 0.3, y: 7.05, w: 4, h: 0.3,
         fontSize: 9, fontFace: FONT, color: '53544A',
@@ -752,7 +757,7 @@ try {
       exportElement(slide, el, isDark, accent, pptx);
     });
 
-    // PHASE 1.5: Slide number bottom-right + divider line
+    // Slide number bottom-right + divider line
     if (slideData.num) {
       var numColor = isDark ? '8B8C81' : '53544A';
 
@@ -773,7 +778,7 @@ try {
 
     if (slideData.notes) slide.addNotes(slideData.notes);
 
-    // PHASE 1.5: Logo with auto-invert + footer positioning
+    // Logo with auto-invert + position-aware placement
     if (_customLogo && !_noLogo) {
       var logoSrc = isDark && _customLogo.srcInverted
         ? _customLogo.srcInverted
@@ -784,7 +789,6 @@ try {
 
       var logoX, logoY;
       if (pos === 'bottom-right') {
-        // Left of divider line, vertically centered with number
         logoX = 12.15 - logoWInches - 0.15;
         logoY = 7.05 + (0.25 - logoHInches) / 2;
       } else if (pos === 'top-right') {
@@ -794,7 +798,6 @@ try {
         logoX = 0.3;
         logoY = 0.15;
       } else {
-        // bottom-left
         logoX = 0.3;
         logoY = 7.05;
       }
@@ -851,7 +854,6 @@ var fn = exporters[el.type];
 if (fn) fn(slide, el, isDark, accent, pptx);
 }
 
-// PHASE 1 + 1.5: margins, compact detection, wrap control
 function exportText(slide, el, isDark) {
 var isCompact = el.w <= 0.80 && el.h <= 0.80;
 slide.addText(el.text || '', {
@@ -918,7 +920,6 @@ slide.addShape(pptx.shapes.RECTANGLE, {
 });
 }
 
-// PHASE 1 + 1.5: Reduced scale, zero margins, line-height 1.0
 function exportIcon(slide, el) {
 var fontSize = Math.min(el.w, el.h) * 72 * 0.45;
 slide.addText(el.icon || '', {

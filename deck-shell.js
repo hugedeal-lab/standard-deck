@@ -1,8 +1,7 @@
 /* ============================================================
- deck-shell.js v5.1.2 -- UI Shell & PPTX Export
+ deck-shell.js v5.1.3 -- UI Shell & PPTX Export
  Depends on: standard-deck.js, deck-layouts.js, pptxgen.bundle.js
- Phase 1 fixes: logo aspect ratio, exportText margins,
-                exportIcon centering, compact text wrap
+ Phase 1.5: Footer redesign, logo auto-invert, PPTX alignment
  ============================================================ */
 
 (function () {
@@ -14,6 +13,8 @@ console.error('[deck-shell] standard-deck.js must load first');
 return;
 }
 
+var FONT = 'Mazda Type, Classico URW, Montserrat, sans-serif';
+
 var _D             = [];
 var _config        = {};
 var _currentSlide  = 0;
@@ -23,7 +24,7 @@ var _noLogo        = false;
 var _imageMode     = false;
 
 // ============================================================
-// STYLES — V5.1.2: Top toolbar
+// STYLES — V5.1.3: Top toolbar
 // ============================================================
 
 function injectStyles() {
@@ -442,6 +443,7 @@ panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
 
 // ============================================================
 // LOGO MANAGER
+// V5.1.3: Auto-invert for dark/light, footer slot positioning
 // ============================================================
 
 function buildLogoPanel(container) {
@@ -465,9 +467,9 @@ panel.innerHTML = [
   '  <span class="sd-logo-size-lbl">80px</span>',
   '  <label>Position:</label>',
   '  <select class="sd-logo-pos">',
+  '    <option value="bottom-right" selected>Bottom Right</option>',
   '    <option value="top-right">Top Right</option>',
   '    <option value="top-left">Top Left</option>',
-  '    <option value="bottom-right">Bottom Right</option>',
   '    <option value="bottom-left">Bottom Left</option>',
   '  </select>',
   '  <button class="sd-btn sd-logo-apply">Apply to All</button>',
@@ -483,7 +485,8 @@ panel.querySelector('.sd-logo-close').addEventListener('click', function () {
 panel.querySelector('.sd-logo-upload').addEventListener('click', function () {
   panel.querySelector('.sd-logo-file').click();
 });
-// PHASE 1 FIX: Capture actual image aspect ratio instead of hardcoded 2:1
+
+// PHASE 1.5: Capture aspect ratio + auto-generate inverted variant
 panel.querySelector('.sd-logo-file').addEventListener('change', function (e) {
   var file = e.target.files[0];
   if (!file) return;
@@ -497,19 +500,32 @@ panel.querySelector('.sd-logo-file').addEventListener('change', function (e) {
     var tempImg = new Image();
     tempImg.onload = function () {
       var aspectRatio = tempImg.naturalHeight / tempImg.naturalWidth;
-      panel.querySelector('.sd-logo-preview').innerHTML = '<img src="' + dataUri + '">';
+
+      // Auto-generate inverted variant for dark slides
+      var invertCanvas = document.createElement('canvas');
+      invertCanvas.width = tempImg.naturalWidth;
+      invertCanvas.height = tempImg.naturalHeight;
+      var ictx = invertCanvas.getContext('2d');
+      ictx.filter = 'invert(1) brightness(2)';
+      ictx.drawImage(tempImg, 0, 0);
+      var invertedUri = invertCanvas.toDataURL('image/png');
+
+      panel.querySelector('.sd-logo-preview').innerHTML =
+        '<img src="' + dataUri + '">';
       panel.querySelector('.sd-logo-controls').style.display = 'flex';
       _customLogo = {
         src: dataUri,
+        srcInverted: invertedUri,
         width: 80,
         aspectRatio: aspectRatio,
-        position: 'top-right'
+        position: 'bottom-right'
       };
     };
     tempImg.src = dataUri;
   };
   reader.readAsDataURL(file);
 });
+
 panel.querySelector('.sd-logo-size').addEventListener('input', function (e) {
   var val = e.target.value;
   panel.querySelector('.sd-logo-size-lbl').textContent = val + 'px';
@@ -524,34 +540,59 @@ panel.querySelector('.sd-logo-apply').addEventListener('click', function () {
 panel.querySelector('.sd-logo-remove').addEventListener('click', function () {
   _customLogo = null;
   removeLogoFromSlides();
-  panel.querySelector('.sd-logo-preview').innerHTML = '<span style="color:#666;font-size:13px;">No logo uploaded</span>';
+  panel.querySelector('.sd-logo-preview').innerHTML =
+    '<span style="color:#666;font-size:13px;">No logo uploaded</span>';
   panel.querySelector('.sd-logo-controls').style.display = 'none';
 });
 
 return panel;
 }
 
+// PHASE 1.5: Logo placement with dark/light auto-invert
+// and footer slot support for bottom-right position
 function applyLogoToSlides() {
 removeLogoFromSlides();
-var slides = document.querySelectorAll('#sd-viewport .slide, #sw .sf');
-slides.forEach(function (slide) {
+var slides = document.querySelectorAll(
+  '#sd-viewport .slide, #sw .sf');
+slides.forEach(function (slide, i) {
+  var isDark = _D[i] && _D[i].dark;
+  var logoSrc = isDark && _customLogo.srcInverted
+    ? _customLogo.srcInverted
+    : _customLogo.src;
+
   var img = document.createElement('img');
-  img.src = _customLogo.src;
+  img.src = logoSrc;
   img.className = 'logo-custom';
+
+  var pos = _customLogo.position || 'bottom-right';
+
+  // Bottom-right: place in footer slot next to divider/number
+  if (pos === 'bottom-right') {
+    var slot = slide.querySelector('.logo-footer-slot');
+    if (slot) {
+      img.style.width = _customLogo.width + 'px';
+      img.style.height = 'auto';
+      slot.appendChild(img);
+      return;
+    }
+  }
+
+  // All other positions: absolute positioning
   img.style.position = 'absolute';
   img.style.width = _customLogo.width + 'px';
   img.style.height = 'auto';
-  var pos = _customLogo.position || 'top-right';
   if (pos.indexOf('top') > -1)    img.style.top = '30px';
   if (pos.indexOf('bottom') > -1) img.style.bottom = '30px';
-  if (pos.indexOf('right') > -1)  img.style.right = '50px';
+  if (pos.indexOf('right') > -1)  img.style.right = '100px';
   if (pos.indexOf('left') > -1)   img.style.left = '50px';
   slide.appendChild(img);
 });
 }
 
 function removeLogoFromSlides() {
-document.querySelectorAll('.logo-custom').forEach(function (el) { el.remove(); });
+document.querySelectorAll('.logo-custom').forEach(function (el) {
+  el.remove();
+});
 }
 
 function toggleLogoPanel() {
@@ -625,10 +666,12 @@ if (!vp || _imageMode) return;
 SD.renderAll(_D, vp);
 _totalSlides = _D.length;
 showSlide(_currentSlide);
+// Re-apply logo after rerender
+if (_customLogo) applyLogoToSlides();
 }
 
 // ============================================================
-// V5.1.2: PPTX EXPORT WITH GUARD + LOGO FIX
+// V5.1.3: PPTX EXPORT — Footer redesign + logo auto-invert
 // ============================================================
 
 function exportPPTX() {
@@ -659,12 +702,21 @@ try {
 
   var accent = SD.getAccent();
 
+  // PHASE 1.5: Footer date (auto-generated)
+  var dateStr = SD.getFooterDate();
+
   pptx.defineSlideMaster({
     title: 'SD_DARK',
     background: { color: '191919' },
     objects: [
-      { rect: { x: 0, y: 0, w: 0.06, h: 7.5, fill: { color: accent.mid.replace('#', '') } } },
-      { text: { text: 'Confidential', options: { x: 0.3, y: 7.1, w: 4, h: 0.3, fontSize: 8, color: '8B8C81', fontFace: 'Mazda Type, Classico URW, Montserrat, sans-serif' } } }
+      { rect: { x: 0, y: 0, w: 0.06, h: 7.5,
+        fill: { color: accent.mid.replace('#', '') } } },
+      // Date bottom-left
+      { text: { text: dateStr, options: {
+        x: 0.3, y: 7.05, w: 4, h: 0.3,
+        fontSize: 9, fontFace: FONT, color: '8B8C81',
+        bold: true, letterSpacing: 1.5
+      } } }
     ]
   });
 
@@ -672,8 +724,14 @@ try {
     title: 'SD_LIGHT',
     background: { color: 'F5F5F5' },
     objects: [
-      { rect: { x: 0, y: 0, w: 0.06, h: 7.5, fill: { color: accent.mid.replace('#', '') } } },
-      { text: { text: 'Confidential', options: { x: 0.3, y: 7.1, w: 4, h: 0.3, fontSize: 8, color: '53544A', fontFace: 'Mazda Type, Classico URW, Montserrat, sans-serif' } } }
+      { rect: { x: 0, y: 0, w: 0.06, h: 7.5,
+        fill: { color: accent.mid.replace('#', '') } } },
+      // Date bottom-left
+      { text: { text: dateStr, options: {
+        x: 0.3, y: 7.05, w: 4, h: 0.3,
+        fontSize: 9, fontFace: FONT, color: '53544A',
+        bold: true, letterSpacing: 1.5
+      } } }
     ]
   });
 
@@ -694,27 +752,56 @@ try {
       exportElement(slide, el, isDark, accent, pptx);
     });
 
+    // PHASE 1.5: Slide number bottom-right + divider line
     if (slideData.num) {
+      var numColor = isDark ? '8B8C81' : '53544A';
+
+      // Divider line
+      slide.addShape(pptx.shapes.RECTANGLE, {
+        x: 12.15, y: 7.05, w: 0.01, h: 0.25,
+        fill: { color: numColor }
+      });
+
+      // Number
       slide.addText(slideData.num, {
-        x: 12.3, y: 0.15, w: 0.8, h: 0.3,
-        fontSize: 10,
-        fontFace: 'Mazda Type, Classico URW, Montserrat, sans-serif',
-        bold: true,
-        color: isDark ? 'F5F5F5' : '191919',
-        align: 'right'
+        x: 12.30, y: 7.05, w: 0.80, h: 0.30,
+        fontSize: 10, fontFace: FONT,
+        bold: true, color: numColor,
+        align: 'left', margin: [0, 0, 0, 0]
       });
     }
 
     if (slideData.notes) slide.addNotes(slideData.notes);
 
-    // PHASE 1 FIX: Use actual aspect ratio instead of hardcoded 0.5
+    // PHASE 1.5: Logo with auto-invert + footer positioning
     if (_customLogo && !_noLogo) {
-      var logoPos = getLogoPosition(_customLogo);
+      var logoSrc = isDark && _customLogo.srcInverted
+        ? _customLogo.srcInverted
+        : _customLogo.src;
       var logoWInches = _customLogo.width / 144;
       var logoHInches = logoWInches * (_customLogo.aspectRatio || 0.5);
+      var pos = _customLogo.position || 'bottom-right';
+
+      var logoX, logoY;
+      if (pos === 'bottom-right') {
+        // Left of divider line, vertically centered with number
+        logoX = 12.15 - logoWInches - 0.15;
+        logoY = 7.05 + (0.25 - logoHInches) / 2;
+      } else if (pos === 'top-right') {
+        logoX = 13.33 - logoWInches - 0.3;
+        logoY = 0.15;
+      } else if (pos === 'top-left') {
+        logoX = 0.3;
+        logoY = 0.15;
+      } else {
+        // bottom-left
+        logoX = 0.3;
+        logoY = 7.05;
+      }
+
       slide.addImage({
-        data: _customLogo.src,
-        x: logoPos.x, y: logoPos.y,
+        data: logoSrc,
+        x: logoX, y: logoY,
         w: logoWInches,
         h: logoHInches
       });
@@ -764,18 +851,17 @@ var fn = exporters[el.type];
 if (fn) fn(slide, el, isDark, accent, pptx);
 }
 
-// PHASE 1 FIX: Added margin:[0,0,0,0], compact detection for
-// small bounding boxes (circles, pills), wrap:false for compact
+// PHASE 1 + 1.5: margins, compact detection, wrap control
 function exportText(slide, el, isDark) {
 var isCompact = el.w <= 0.80 && el.h <= 0.80;
 slide.addText(el.text || '', {
   x: el.x, y: el.y, w: el.w, h: el.h,
   fontSize: el.size,
-  fontFace: 'Mazda Type, Classico URW, Montserrat, sans-serif',
+  fontFace: FONT,
   bold: el.font === 'H' || el.bold,
   italic: !!el.italic,
   color: SD.colorForPptx(el.color || 'body', isDark),
-  align: el.align || 'left',
+  align: el.align || (isCompact ? 'center' : 'left'),
   valign: el.valign || 'top',
   lineSpacingMultiple: isCompact ? 1.0 : 1.35,
   wrap: !isCompact,
@@ -817,7 +903,7 @@ slide.addShape(pptx.shapes.ROUNDED_RECTANGLE, {
 slide.addText(el.text || '', {
   x: el.x, y: el.y, w: el.w, h: el.h,
   fontSize: el.size || 9,
-  fontFace: 'Mazda Type, Classico URW, Montserrat, sans-serif',
+  fontFace: FONT,
   bold: true,
   color: SD.colorForPptx(el.color || 'white', isDark),
   align: 'center', valign: 'middle',
@@ -832,8 +918,7 @@ slide.addShape(pptx.shapes.RECTANGLE, {
 });
 }
 
-// PHASE 1 FIX: Reduced emoji scale 0.55→0.45, zero margins,
-// lineSpacing 1.0 for better vertical centering in circles
+// PHASE 1 + 1.5: Reduced scale, zero margins, line-height 1.0
 function exportIcon(slide, el) {
 var fontSize = Math.min(el.w, el.h) * 72 * 0.45;
 slide.addText(el.icon || '', {
@@ -898,7 +983,7 @@ if (headers.length) {
         fill: { color: SD.colorForPptx('accent', isDark) },
         color: 'FFFFFF',
         fontSize: 11,
-        fontFace: 'Mazda Type, Classico URW, Montserrat, sans-serif'
+        fontFace: FONT
       }
     };
   }));
@@ -909,7 +994,7 @@ rows.forEach(function (row, ri) {
       text: String(cell),
       options: {
         fontSize: 10,
-        fontFace: 'Mazda Type, Classico URW, Montserrat, sans-serif',
+        fontFace: FONT,
         color: SD.colorForPptx('body', isDark),
         fill: ri % 2 === 0
           ? { color: isDark ? '363732' : 'F5F5F5' }
@@ -921,7 +1006,7 @@ rows.forEach(function (row, ri) {
 slide.addTable(tableRows, {
   x: el.x, y: el.y, w: el.w,
   fontSize: 10,
-  fontFace: 'Mazda Type, Classico URW, Montserrat, sans-serif',
+  fontFace: FONT,
   border: { type: 'solid', color: 'C2C4B8', pt: 0.5 },
   colW: el.colW || undefined
 });
@@ -941,7 +1026,7 @@ if (img && img.src && img.src.indexOf('data:') === 0) {
 // ============================================================
 
 function getLogoPosition(logo) {
-var pos = logo.position || 'top-right';
+var pos = logo.position || 'bottom-right';
 var wInches = logo.width / 144;
 return {
   x: pos.indexOf('right') > -1 ? 13.33 - wInches - 0.3 : 0.3,
@@ -954,7 +1039,7 @@ return title.replace(/[^a-zA-Z0-9\s_-]/g, '').replace(/\s+/g, '_').substring(0, 
 }
 
 // ============================================================
-// V5.1.2: UPDATED deckInit()
+// V5.1.3: UPDATED deckInit()
 // ============================================================
 
 function deckInit(config) {
